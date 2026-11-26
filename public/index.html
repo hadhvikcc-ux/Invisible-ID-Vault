@@ -31,14 +31,68 @@
     <label>Passphrase<input id="unlockPass" type="password"></label>
     <button id="unlockBtn">Unlock vault</button>
     <p id="unlockMsg" class="msg"></p>
+    <p class="muted small">PIN unlock is Android-only: the web vault is unlocked by the server, and a PIN could only work here by storing your ID + passphrase in the browser — so it is deliberately not offered on the web.</p>
   </section>
 
   <section class="card hidden" id="vaultCard">
     <h2>3 · Your vault <span id="vaultFp" class="muted"></span></h2>
-    <p class="muted">Your ID is <strong>not shown anywhere on this page</strong> — only the fingerprint above.</p>
+    <p class="muted">Your ID is <strong>not shown anywhere on this page</strong> — only the fingerprint above. <span id="idleCountdown" class="msg"></span></p>
+    <p><button id="logoutBtn" class="ghost">Lock vault</button></p>
+
+    <div class="subcard">
+      <h3>Vault health</h3>
+      <div id="health"><p class="muted">Add app logins to see weak and reused passwords.</p></div>
+    </div>
+
+    <div class="subcard">
+      <h3>Encrypted backup</h3>
+      <p class="muted small">Export downloads a JSON file encrypted with AES-GCM. Passwords are never exported in plaintext. You need the backup passphrase to import it again. This backs up your app logins (stored in this browser); server notes are backed up separately.</p>
+      <label>Backup passphrase (8+ characters)<input id="backupPass" type="password" autocomplete="off"></label>
+      <button id="exportBtn">Export encrypted backup</button>
+      <button id="importBtn" class="ghost">Import backup…</button>
+      <input type="file" id="importFile" accept="application/json,.json" class="hidden">
+      <p id="backupMsg" class="msg"></p>
+    </div>
+
+    <h3>Social apps hub</h3>
+    <p class="muted small">Store logins for Facebook, Instagram, YouTube, WhatsApp, X, Gmail — or any app. Launch opens the app's site; the vault itself never logs you in (each app still needs its own sign-in). App logins are stored in this browser only, and only shown after you unlock with your invisible ID.</p>
+    <input id="searchInput" type="search" placeholder="Search apps or usernames…">
+    <div id="categoryChips" class="chips"></div>
+
+    <div class="subcard">
+      <h3>Add an app login</h3>
+      <label>App
+        <select id="secretApp">
+          <option>Facebook</option><option>Instagram</option><option>YouTube</option>
+          <option>WhatsApp</option><option>X</option><option>Gmail</option><option value="">Custom…</option>
+        </select>
+      </label>
+      <label>Custom app name (if not listed)<input id="secretCustomApp" placeholder="e.g. Netflix"></label>
+      <label>Username / email<input id="secretUsername" autocomplete="off"></label>
+      <label>Password
+        <span class="row"><input id="secretPassword" type="password" autocomplete="new-password">
+        <button id="togglePwBtn" type="button" class="ghost">Show</button>
+        <button id="genPwBtn" type="button" class="ghost">Generate</button></span>
+      </label>
+      <div class="strength"><div id="pwStrengthBar"></div></div>
+      <p id="pwStrengthLabel" class="muted small"></p>
+      <label>Category
+        <select id="secretCategory">
+          <option>Social</option><option>Video</option><option>Email</option><option>Messaging</option>
+          <option>Banking</option><option>Work</option><option>Other</option>
+        </select>
+      </label>
+      <label>Website / launch URL<input id="secretUrl" value="https://facebook.com"></label>
+      <label><input type="checkbox" id="secretFav" style="width:auto"> ★ Favourite</label>
+      <button id="addSecretBtn">Save app login</button>
+      <p id="secretMsg" class="msg"></p>
+    </div>
+
+    <ul id="secrets" class="secrets"></ul>
+
+    <h3>Secure notes</h3>
     <textarea id="noteText" placeholder="Write a secure note…"></textarea>
     <button id="addNoteBtn">Add note</button>
-    <button id="logoutBtn" class="ghost">Lock vault</button>
     <ul id="notes"></ul>
   </section>
 
@@ -49,6 +103,7 @@
     <p id="attackMsg" class="msg"></p>
     <p class="muted small">Honest note: invisibility is one layer, not magic. This app also uses bcrypt, rate limiting, hashed IDs, constant-time compare and generic errors. See SECURITY.md in the repo.</p>
   </section>
+  <div id="toast" class="toast hidden"></div>
 </main>
 <script src="app.js"></script>
 </body></html>

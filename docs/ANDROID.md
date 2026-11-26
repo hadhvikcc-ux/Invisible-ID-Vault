@@ -24,6 +24,51 @@ with **no server and no network**:
 - Add / list secure notes stored on the device only.
 - A brute-force / entropy demo (guessing a 256-bit ID ≈ 10⁶³ years).
 
+## New features (Nov 2026)
+
+All of these are in `www/` (Android) and, where the server allows, in `public/` (web):
+
+- **Social apps hub** — preset logins for Facebook, Instagram, YouTube,
+  WhatsApp, X and Gmail, plus any custom app. Each login has an app name,
+  icon (letter avatar, no external images), username, password, category,
+  launch URL and a favourite star. **Launch** opens the app's site in a new
+  tab (`facebook.com`, `instagram.com`, `youtube.com`, `web.whatsapp.com`,
+  `x.com`, `mail.google.com`). The vault never logs you into an app — each
+  app still needs its own sign-in; the vault stores the login and launches it.
+  One-tap **Copy user / Copy pass**; a copied password is hidden again
+  after 30 seconds. **Show / Hide** toggles a password per login.
+- **Search, favourites, categories** — live search by app or username,
+  category chips (All, Social, Video, Email, Messaging, Banking, Work,
+  Other), favourite star; favourites are shown first.
+- **PIN unlock (Android only)** — after unlocking once with your invisible
+  ID + passphrase, set a 4–6 digit PIN. The PIN is stored only as a SHA-256
+  hash + salt on the device, never in plaintext. Next time you can unlock
+  with the PIN instead of pasting the long ID; "Forgot PIN" falls back to
+  the invisible ID. The PIN is a convenience gate on this device only — it
+  does not replace the ID + passphrase. Android fingerprint unlock is a
+  future step via `@capacitor/biometrics`; it is not faked here.
+- **Auto-lock** — the vault locks after 2 minutes idle (any tap, key or
+  input resets the timer), with a countdown shown while unlocked, plus a
+  **Lock now** button.
+- **Password generator + strength meter** — 16-character generated
+  passwords (letters, digits, symbols) with a copy button, and a
+  weak / medium / strong meter based on length and character variety.
+- **Vault health** — counts logins by category, flags weak passwords, and
+  warns when the same password is reused across 2+ apps.
+- **Encrypted backup** — Export downloads `invisible-id-vault-backup.json`
+  in the `iiv-backup-v1` format: `{ format, salt, iv, data, count, createdAt }`,
+  where `data` is the logins + notes encrypted with **AES-GCM** (WebCrypto),
+  the key derived from a user-chosen backup passphrase with PBKDF2-SHA256
+  (100,000 iterations, random 16-byte salt, random 12-byte IV). Import
+  decrypts the file with that passphrase and merges logins it does not
+  already have (same app + username is skipped). **Plaintext passwords are
+  never exported.** Lose the backup passphrase and the file is unreadable.
+
+On the web (`public/`), the same hub, search, generator, health, backup and
+auto-lock are available, but app logins are stored in the browser (keyed by
+vault fingerprint) and only shown after a server unlock, and PIN unlock is
+not offered — it would require storing your ID + passphrase in the browser.
+
 App ID: `com.hadhvik.invisibleidvault` · App name: `Invisible ID Vault` ·
 Web directory: `www/` · See `capacitor.config.json`.
 

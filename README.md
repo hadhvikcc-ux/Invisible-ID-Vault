@@ -9,8 +9,20 @@ An account system where **the user ID itself is invisible, opaque and unguessabl
 
 1. **Create an invisible identity** — server generates a 256-bit random ID (`UUID + 32 random bytes`). Shown **once** as a recovery key. Never shown, logged, or put in a URL again.
 2. **Unlock** — enter the invisible ID + passphrase. Wrong ID and wrong passphrase return the *same* generic error.
-3. **Vault** — save private notes. The UI shows only a fingerprint like `••••-a3f9`, never the ID.
+3. **Vault** — save private notes and app logins (Facebook, Instagram, YouTube, WhatsApp, X, Gmail…). The UI shows only a fingerprint like `••••-a3f9`, never the ID.
 4. **Try to hack it** — demo panel shows why brute force is infeasible (≈10⁶³ years at 1 trillion guesses/sec).
+
+## User-friendly features
+
+- **Social apps hub:** one-tap launch, copy username/password (password hides again after 30 s), show/hide password.
+- **Search, favourites, categories:** live search, category chips, favourites first.
+- **PIN unlock (Android):** 4–6 digit PIN after the first ID unlock, with invisible-ID fallback.
+- **Auto-lock:** locks after 2 minutes idle, with a countdown and a Lock now button.
+- **Password generator + strength meter** when adding a login.
+- **Vault health:** weak and reused passwords flagged, logins counted by category.
+- **Encrypted backup:** AES-GCM export/import with a backup passphrase — plaintext passwords are never exported.
+
+See [docs/ANDROID.md](docs/ANDROID.md) for the full list and the backup file format.
 
 ## Android app
 

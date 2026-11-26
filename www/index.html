@@ -30,8 +30,17 @@
     <p id="createMsg" class="msg"></p>
   </section>
 
+  <section class="card hidden" id="pinUnlockCard">
+    <h2>Unlock with PIN</h2>
+    <p class="muted">PIN set on this device. A PIN is a shortcut on this phone only — it never replaces your invisible ID.</p>
+    <label>PIN (4–6 digits)<input id="pinUnlockInput" type="password" inputmode="numeric" autocomplete="off" maxlength="6"></label>
+    <button id="pinUnlockBtn">Unlock with PIN</button>
+    <p id="pinUnlockMsg" class="msg"></p>
+    <p class="muted small"><a href="#" id="useIdLink">Forgot PIN? Use your invisible ID instead →</a></p>
+  </section>
+
   <section class="card">
-    <h2>2 · Unlock</h2>
+    <h2>2 · Unlock with invisible ID</h2>
     <p class="muted">Enter your invisible ID (recovery key) + passphrase. A wrong ID and a wrong passphrase give the <em>same</em> error — an attacker learns nothing.</p>
     <label>Invisible ID / recovery key<input id="unlockId" placeholder="paste your recovery key" autocomplete="off"></label>
     <label>Passphrase<input id="unlockPass" type="password" autocomplete="current-password"></label>
@@ -41,11 +50,76 @@
 
   <section class="card hidden" id="vaultCard">
     <h2>3 · Your vault <span id="vaultFp" class="muted"></span></h2>
-    <p class="muted">Your ID is <strong>not shown anywhere on this page</strong> — only the fingerprint above.</p>
+    <p class="muted">Your ID is <strong>not shown anywhere on this page</strong> — only the fingerprint above. <span id="idleCountdown" class="msg"></span></p>
+    <p>
+      <button id="lockBtn" class="ghost">Lock now</button>
+      <button id="deleteBtn" class="ghost">Delete vault</button>
+    </p>
+
+    <div id="pinSection" class="hidden subcard">
+      <h3>PIN unlock</h3>
+      <p class="muted small" id="pinStatus"></p>
+      <label>Set / change PIN (4–6 digits)<input id="pinInput" type="password" inputmode="numeric" autocomplete="off" maxlength="6"></label>
+      <button id="setPinBtn">Set PIN</button>
+      <button id="removePinBtn" class="ghost hidden">Remove PIN</button>
+      <p id="pinMsg" class="msg"></p>
+      <p class="muted small">Android fingerprint unlock is a future step (via @capacitor/biometrics) — it is not faked here. The PIN is stored only as a SHA-256 hash + salt on this device.</p>
+    </div>
+
+    <div class="subcard">
+      <h3>Vault health</h3>
+      <div id="health"><p class="muted">Unlock to see weak and reused passwords.</p></div>
+    </div>
+
+    <div class="subcard">
+      <h3>Encrypted backup</h3>
+      <p class="muted small">Export downloads a JSON file encrypted with AES-GCM. Passwords are never exported in plaintext. You need the backup passphrase to import it again.</p>
+      <label>Backup passphrase (8+ characters)<input id="backupPass" type="password" autocomplete="off"></label>
+      <button id="exportBtn">Export encrypted backup</button>
+      <button id="importBtn" class="ghost">Import backup…</button>
+      <input type="file" id="importFile" accept="application/json,.json" class="hidden">
+      <p id="backupMsg" class="msg"></p>
+    </div>
+
+    <h3>Social apps hub</h3>
+    <p class="muted small">Store logins for Facebook, Instagram, YouTube, WhatsApp, X, Gmail — or any app. Launch opens the app's site; the vault itself never logs you in (each app still needs its own sign-in).</p>
+    <input id="searchInput" type="search" placeholder="Search apps or usernames…">
+    <div id="categoryChips" class="chips"></div>
+
+    <div class="subcard">
+      <h3>Add an app login</h3>
+      <label>App
+        <select id="secretApp">
+          <option>Facebook</option><option>Instagram</option><option>YouTube</option>
+          <option>WhatsApp</option><option>X</option><option>Gmail</option><option value="">Custom…</option>
+        </select>
+      </label>
+      <label>Custom app name (if not listed)<input id="secretCustomApp" placeholder="e.g. Netflix"></label>
+      <label>Username / email<input id="secretUsername" autocomplete="off"></label>
+      <label>Password
+        <span class="row"><input id="secretPassword" type="password" autocomplete="new-password">
+        <button id="togglePwBtn" type="button" class="ghost">Show</button>
+        <button id="genPwBtn" type="button" class="ghost">Generate</button></span>
+      </label>
+      <div class="strength"><div id="pwStrengthBar"></div></div>
+      <p id="pwStrengthLabel" class="muted small"></p>
+      <label>Category
+        <select id="secretCategory">
+          <option>Social</option><option>Video</option><option>Email</option><option>Messaging</option>
+          <option>Banking</option><option>Work</option><option>Other</option>
+        </select>
+      </label>
+      <label>Website / launch URL<input id="secretUrl" value="https://facebook.com"></label>
+      <label><input type="checkbox" id="secretFav" style="width:auto"> ★ Favourite</label>
+      <button id="addSecretBtn">Save app login</button>
+      <p id="secretMsg" class="msg"></p>
+    </div>
+
+    <ul id="secrets" class="secrets"></ul>
+
+    <h3>Secure notes</h3>
     <textarea id="noteText" placeholder="Write a secure note…"></textarea>
     <button id="addNoteBtn">Add note</button>
-    <button id="lockBtn" class="ghost">Lock vault</button>
-    <button id="deleteBtn" class="ghost">Delete vault</button>
     <ul id="notes"></ul>
   </section>
 
@@ -56,6 +130,7 @@
     <p id="attackMsg" class="msg"></p>
     <p class="muted small">Honest note: invisibility is one layer, not magic. This offline app also uses SHA-256 ID hashing, PBKDF2 passphrase hashing, a random salt, and generic errors. Losing both the ID and the passphrase means the vault is unrecoverable — there is no email reset, by design. See SECURITY.md in the repo.</p>
   </section>
+  <div id="toast" class="toast hidden"></div>
 </main>
 <script src="app.js"></script>
 </body>
