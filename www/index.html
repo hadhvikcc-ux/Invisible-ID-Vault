@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Invisible ID Vault — Android</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<main class="wrap">
+  <header>
+    <h1>🔒 Invisible ID Vault</h1>
+    <p class="sub">Offline Android vault. No username, no email, no visible ID, no server.
+    Your account is a 256-bit secret, shown once, never displayed again. Without it, the account cannot even be found.</p>
+    <p class="muted small">Everything stays on this device, in local storage. Nothing is sent over the network.</p>
+  </header>
+
+  <section class="card" id="createCard">
+    <h2>1 · Create an invisible identity</h2>
+    <label>Private nickname (only you see this)<input id="label" value="My vault" maxlength="60"></label>
+    <label>Passphrase (8+ characters)<input id="pass" type="password" placeholder="Choose a strong passphrase" autocomplete="new-password"></label>
+    <button id="createBtn">Create invisible identity</button>
+    <div id="recovery" class="hidden">
+      <p><strong>⚠️ Save this recovery key now — it is your invisible ID. It will never be shown again.</strong></p>
+      <code id="recoveryKey"></code>
+      <button id="copyBtn">Copy recovery key</button>
+      <p class="muted">Fingerprint (for recognition only, not the ID): <span id="fp"></span></p>
+      <label><input type="checkbox" id="savedCheck" style="width:auto"> I have saved the recovery key somewhere safe</label>
+    </div>
+    <p id="createMsg" class="msg"></p>
+  </section>
+
+  <section class="card">
+    <h2>2 · Unlock</h2>
+    <p class="muted">Enter your invisible ID (recovery key) + passphrase. A wrong ID and a wrong passphrase give the <em>same</em> error — an attacker learns nothing.</p>
+    <label>Invisible ID / recovery key<input id="unlockId" placeholder="paste your recovery key" autocomplete="off"></label>
+    <label>Passphrase<input id="unlockPass" type="password" autocomplete="current-password"></label>
+    <button id="unlockBtn">Unlock vault</button>
+    <p id="unlockMsg" class="msg"></p>
+  </section>
+
+  <section class="card hidden" id="vaultCard">
+    <h2>3 · Your vault <span id="vaultFp" class="muted"></span></h2>
+    <p class="muted">Your ID is <strong>not shown anywhere on this page</strong> — only the fingerprint above.</p>
+    <textarea id="noteText" placeholder="Write a secure note…"></textarea>
+    <button id="addNoteBtn">Add note</button>
+    <button id="lockBtn" class="ghost">Lock vault</button>
+    <button id="deleteBtn" class="ghost">Delete vault</button>
+    <ul id="notes"></ul>
+  </section>
+
+  <section class="card">
+    <h2>Try to hack it</h2>
+    <p>Brute-forcing a 256-bit invisible ID at 1 trillion guesses/second would take about <strong>10⁶³ years</strong> — far longer than the age of the universe. There is also no username list to enumerate and no server to attack.</p>
+    <button id="attackBtn">Simulate 1,000,000 guesses</button>
+    <p id="attackMsg" class="msg"></p>
+    <p class="muted small">Honest note: invisibility is one layer, not magic. This offline app also uses SHA-256 ID hashing, PBKDF2 passphrase hashing, a random salt, and generic errors. Losing both the ID and the passphrase means the vault is unrecoverable — there is no email reset, by design. See SECURITY.md in the repo.</p>
+  </section>
+</main>
+<script src="app.js"></script>
+</body>
+</html>
