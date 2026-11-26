@@ -45,8 +45,22 @@ All of these are in `www/` (Android) and, where the server allows, in `public/` 
   hash + salt on the device, never in plaintext. Next time you can unlock
   with the PIN instead of pasting the long ID; "Forgot PIN" falls back to
   the invisible ID. The PIN is a convenience gate on this device only — it
-  does not replace the ID + passphrase. Android fingerprint unlock is a
-  future step via `@capacitor/biometrics`; it is not faked here.
+  does not replace the ID + passphrase.
+- **Fingerprint unlock (Android only)** — after unlocking once with your
+  invisible ID + passphrase, enable fingerprint unlock in the vault.
+  It uses the free, maintained `@capgo/capacitor-native-biometric`
+  v8 plugin (Capacitor 8; **not** `@capacitor/biometrics`, which has no
+  Capacitor 8 install, and not Capawesome Biometrics, which needs a
+  paid Insiders licence). A random 256-bit token is stored in the
+  Android Keystore with `BIOMETRY_ANY` access control, and only its
+  SHA-256 hash is kept on the device — the raw invisible ID is never
+  stored in the Keystore or in localStorage. Unlocking reads the token
+  back with `getSecureCredentials()`, which shows one native biometric
+  prompt bound to that Keystore read; a failed or cancelled prompt
+  falls back to PIN / invisible ID. The "Unlock with fingerprint"
+  button only appears when `isAvailable({ useFallback: false })`
+  reports a biometric is actually enrolled — device PIN alone does
+  not count. See "Fingerprint unlock" below for the full design.
 - **Auto-lock** — the vault locks after 2 minutes idle (any tap, key or
   input resets the timer), with a countdown shown while unlocked, plus a
   **Lock now** button.
@@ -68,6 +82,51 @@ On the web (`public/`), the same hub, search, generator, health, backup and
 auto-lock are available, but app logins are stored in the browser (keyed by
 vault fingerprint) and only shown after a server unlock, and PIN unlock is
 not offered — it would require storing your ID + passphrase in the browser.
+Fingerprint unlock is likewise **not** offered on the web: the plugin
+ships a web implementation whose `isAvailable()` always returns true and
+whose `verifyIdentity()` always succeeds, so offering it there would be
+fake security. The Android code gates on `window.Capacitor` reporting a
+native Android platform before it ever touches the plugin.
+
+## Fingerprint unlock — design and limits
+
+- **Plugin:** `@capgo/capacitor-native-biometric` **8.9.3** (exact),
+  peer `@capacitor/core >= 8.0.0`, MPL-2.0, free. Installed with
+  `npm install --save-exact @capgo/capacitor-native-biometric@8.9.3`.
+  The plugin is registered natively as `NativeBiometric` and reached
+  from the plain `www/app.js` script via
+  `window.Capacitor.Plugins.NativeBiometric` — there is no bundler in
+  `www/`, so no `import` of the plugin is used.
+- **What is stored where:** enabling fingerprint generates a random
+  256-bit token. `setCredentials({ server: 'com.hadhvik.invisibleidvault',
+  accessControl: BIOMETRY_ANY })` stores it in the Android Keystore
+  (the plugin prompts for a biometric to protect it). Only
+  `SHA-256(token)` is stored in the vault record in localStorage
+  (`vault.bioHash`). `BIOMETRY_ANY` (not `BIOMETRY_CURRENT_SET`) is
+  used so the token survives enrolling a new fingerprint; the
+  invisible ID is still the recovery path if biometrics are reset.
+- **Unlock:** `isAvailable({ useFallback: false })` first, then one
+  `getSecureCredentials({ server })` call — a single native prompt
+  cryptographically bound to the Keystore read. The returned token's
+  hash is compared with `vault.bioHash`; on a match the vault opens.
+  If that read fails for a reason other than the user cancelling, the
+  code falls back to `verifyIdentity()` (prompt-only) followed by
+  `getCredentials()`. A cancelled or failed biometric never unlocks
+  the vault — PIN and invisible ID remain available.
+- **Removal:** disabling fingerprint or deleting the vault calls
+  `deleteCredentials({ server })`, so no orphaned Keystore entry
+  is left behind.
+- **Honest limits:** fingerprint is a *local convenience gate*, like
+  the PIN — it never replaces the invisible ID + passphrase, and the
+  plugin itself warns `verifyIdentity()` must not be the sole
+  authentication mechanism (it can be bypassed on a rooted device).
+  **Not tested on a real phone yet:** there is no Android SDK or
+  device in this dev environment, so the native prompt, the
+  Keystore round-trip and the `cap sync` native wiring have only been
+  verified by code review, syntax checks and the guard tests in
+  `tests/biometric.test.js` (8/8 pass). Test it on your phone after
+  installing the new APK — if the fingerprint button never appears,
+  your phone has no fingerprint enrolled, or the plugin did not sync.
 
 App ID: `com.hadhvik.invisibleidvault` · App name: `Invisible ID Vault` ·
 Web directory: `www/` · See `capacitor.config.json`.
@@ -83,8 +142,8 @@ on GitHub Actions — see `.github/workflows/android.yml`:
 2. The job sets up Node 24, runs `npm ci`, generates the Android platform
    with `npx cap add android` (if not present), then `npx cap sync android`
    to copy `www/` into the Android project.
-3. It sets up JDK 17 (Temurin) and the Android SDK, then runs
-   `./gradlew -p android assembleDebug`.
+3. It sets up JDK 21 (Temurin — Capacitor 8 needs Java source release
+   21) and the Android SDK, then runs `./gradlew -p android assembleDebug`.
 4. The built APK is uploaded as an Actions artifact named
    **`invisible-id-vault-debug-apk`** (kept for 30 days).
 

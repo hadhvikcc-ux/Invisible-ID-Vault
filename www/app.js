@@ -8,6 +8,17 @@
  *   passphrase return the same generic error.
  * - PIN is a local convenience gate only (see setPin): it never replaces the
  *   ID + passphrase, and "Forgot PIN" falls back to the invisible ID.
+ * - Fingerprint unlock is the same kind of local convenience gate, via the
+ *   free @capgo/capacitor-native-biometric v8 plugin (see the biometric
+ *   section below). A random 256-bit token is stored in the Android
+ *   Keystore with BIOMETRY_ANY access control, and only its SHA-256 hash
+ *   is kept in localStorage (vault.bioHash). Unlocking reads the token
+ *   back with getSecureCredentials(), which shows ONE native biometric
+ *   prompt bound to that Keystore read, and compares hashes — the raw
+ *   invisible ID is never stored in the Keystore or in localStorage.
+ *   Biometrics are Android-native only: the plugin's web implementation
+ *   is a dummy that always "succeeds", so fingerprint is never offered
+ *   unless window.Capacitor reports a native Android platform.
  * - Backups are AES-GCM encrypted with a user-chosen backup passphrase;
  *   plaintext passwords are NEVER exported.
  */
@@ -33,7 +44,7 @@ async function derivePassHash(passphrase, saltHex) {
 function fingerprint(idHash) { return '••••-' + idHash.slice(-4); }
 function loadVault() { try { return JSON.parse(localStorage.getItem(STORE_KEY) || 'null'); } catch { return null; } }
 function saveVault(v) { localStorage.setItem(STORE_KEY, JSON.stringify(v)); }
-function migrate(v) { if (!v) return v; if (!Array.isArray(v.secrets)) v.secrets = []; if (!Array.isArray(v.notes)) v.notes = []; return v; }
+function migrate(v) { if (!v) return v; if (!Array.isArray(v.secrets)) v.secrets = []; if (!Array.isArray(v.notes)) v.notes = []; if (!('bioHash' in v)) v.bioHash = null; return v; }
 const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 /* ---------- social apps hub ---------- */
@@ -56,6 +67,7 @@ let unlocked = false;
 let visiblePasswords = new Set(); // secret ids whose password is shown
 let searchQuery = '', activeCategory = 'All';
 let idleSecondsLeft = 120, idleTimer = null, countdownTimer = null;
+let bioAvailable = false; // true only when native Android biometrics are enrolled
 
 /* ---------- password generator + strength ---------- */
 function passwordStrength(pw) {
@@ -101,7 +113,7 @@ $('createBtn').onclick = async () => {
   const invisibleId = generateInvisibleId();
   const idHash = await sha256Hex(invisibleId);
   const derived = await derivePassHash(pass);
-  saveVault(migrate({ label, idHash, salt: derived.salt, passHash: derived.hash, notes: [], secrets: [], pinHash: null, pinSalt: null, createdAt: new Date().toISOString() }));
+  saveVault(migrate({ label, idHash, salt: derived.salt, passHash: derived.hash, notes: [], secrets: [], pinHash: null, pinSalt: null, bioHash: null, createdAt: new Date().toISOString() }));
   $('recovery').classList.remove('hidden');
   $('recoveryKey').textContent = invisibleId;
   $('fp').textContent = fingerprint(idHash);
@@ -118,6 +130,7 @@ function showVault(v) {
   $('unlockMsg').textContent = 'Unlocked.';
   $('pinSection').classList.remove('hidden');
   updatePinUI();
+  updateBioUI();
   startIdleTimer();
   renderAll();
 }
@@ -164,6 +177,157 @@ $('pinUnlockBtn').onclick = async () => {
 };
 $('useIdLink').onclick = (e) => { e.preventDefault(); $('pinUnlockCard').classList.add('hidden'); $('unlockId').focus(); };
 
+/* ---------- Fingerprint / biometric unlock (Android native only) ----------
+ * Plugin: @capgo/capacitor-native-biometric v8 (free, MPL-2.0, maintained
+ * for Capacitor 8). NOT @capacitor/biometrics — there is no such install
+ * for Capacitor 8 — and NOT Capawesome Biometrics, which needs a paid
+ * Insiders licence.
+ *
+ * How it works, step by step:
+ * 1. nativeBiometric() returns the plugin ONLY on a native Android
+ *    Capacitor platform. On the web the plugin ships a dummy
+ *    implementation whose isAvailable() always returns true and whose
+ *    verifyIdentity() always succeeds, so fingerprint is never offered
+ *    there — offering it would be fake security.
+ * 2. isAvailable({ useFallback: false }) is the gate: device PIN/pattern
+ *    alone must NOT count as a biometric, so useFallback is false and
+ *    a DEVICE_CREDENTIAL / NONE biometry type does not count either.
+ * 3. Enabling (after an ID+passphrase unlock) generates a random
+ *    256-bit token, stores it in the Android Keystore via
+ *    setCredentials({ server, accessControl: BIOMETRY_ANY }) — the
+ *    plugin prompts for a biometric to protect it — and stores ONLY
+ *    sha256(token) in the vault record (vault.bioHash). The token and
+ *    the raw invisible ID are never written to localStorage.
+ *    BIOMETRY_ANY (value 2) is used, not BIOMETRY_CURRENT_SET, so the
+ *    token survives adding a new fingerprint; the invisible ID remains
+ *    the recovery path if biometrics are ever reset.
+ * 4. Unlocking calls getSecureCredentials({ server }), which shows ONE
+ *    native biometric prompt cryptographically bound (CryptoObject) to
+ *    that Keystore read and returns the token. The token's hash is
+ *    compared with vault.bioHash; on a match the vault opens.
+ *    verifyIdentity() is the prompt-only API: it is used as the
+ *    fallback below, followed by getCredentials(), if
+ *    getSecureCredentials() fails for a reason other than the user
+ *    cancelling. A failed or cancelled biometric always falls back
+ *    gracefully to PIN / invisible ID — never to an unlocked vault.
+ * 5. Disabling / deleting the vault calls deleteCredentials() so no
+ *    orphaned Keystore entry is left behind.
+ */
+const BIO_SERVER = 'com.hadhvik.invisibleidvault';
+const BIO_ACCESS_BIOMETRY_ANY = 2; // AccessControl.BIOMETRY_ANY in the plugin
+const BIO_TYPE_NONE = 0, BIO_TYPE_DEVICE_CREDENTIAL = 7;
+
+function nativeBiometric() {
+  try {
+    if (typeof window === 'undefined' || !window.Capacitor) return null;
+    if (typeof window.Capacitor.isNativePlatform === 'function' && !window.Capacitor.isNativePlatform()) return null;
+    if (typeof window.Capacitor.getPlatform === 'function' && window.Capacitor.getPlatform() !== 'android') return null;
+    const plugins = window.Capacitor.Plugins || {};
+    return plugins.NativeBiometric || null;
+  } catch { return null; }
+}
+function bioIsCancelError(e) {
+  if (!e) return false;
+  const code = String(e.code ?? '');
+  const msg = String(e.message ?? '');
+  return code === '16' || code === '15' || /cancel/i.test(msg) || /cancel/i.test(code);
+}
+async function checkBiometricAvailability() {
+  const plugin = nativeBiometric();
+  if (!plugin) { bioAvailable = false; return false; }
+  try {
+    const r = await plugin.isAvailable({ useFallback: false });
+    // isAvailable alone is the decision; biometryType is display-only,
+    // but a NONE / DEVICE_CREDENTIAL type must not count as a fingerprint.
+    bioAvailable = !!(r && r.isAvailable && r.biometryType !== BIO_TYPE_NONE && r.biometryType !== BIO_TYPE_DEVICE_CREDENTIAL);
+  } catch { bioAvailable = false; }
+  updateBioUnlockCard();
+  return bioAvailable;
+}
+function updateBioUnlockCard() {
+  const card = $('bioUnlockCard');
+  if (!card) return;
+  const v = loadVault();
+  card.classList.toggle('hidden', !(bioAvailable && v && v.bioHash));
+}
+function updateBioUI() {
+  const section = $('bioSection');
+  if (!section) return;
+  section.classList.toggle('hidden', !bioAvailable);
+  if (!bioAvailable) return;
+  const enabled = !!(vault && vault.bioHash);
+  $('bioStatus').textContent = enabled
+    ? 'Fingerprint unlock is on for this device. It unlocks the same vault — your invisible ID is still the recovery path.'
+    : 'No fingerprint set. Enable it after unlocking with your invisible ID — your phone will ask for your fingerprint to protect it.';
+  $('enableBioBtn').classList.toggle('hidden', enabled);
+  $('disableBioBtn').classList.toggle('hidden', !enabled);
+}
+$('enableBioBtn').onclick = async () => {
+  const plugin = nativeBiometric();
+  if (!plugin || !vault) { $('bioMsg').textContent = 'Fingerprint is not available on this device.'; return; }
+  try {
+    const tokenBytes = new Uint8Array(32); crypto.getRandomValues(tokenBytes);
+    const token = bufToHex(tokenBytes);
+    // setCredentials with BIOMETRY_ANY prompts for a biometric and stores
+    // the token in the Android Keystore; it never touches localStorage.
+    await plugin.setCredentials({
+      username: fingerprint(vault.idHash), password: token, server: BIO_SERVER,
+      accessControl: BIO_ACCESS_BIOMETRY_ANY, title: 'Protect fingerprint unlock', negativeButtonText: 'Cancel',
+    });
+    vault.bioHash = await sha256Hex(token);
+    saveVault(vault);
+    $('bioMsg').textContent = 'Fingerprint unlock enabled on this device.';
+    updateBioUI(); updateBioUnlockCard();
+    toast('Fingerprint unlock enabled.');
+  } catch (e) {
+    $('bioMsg').textContent = bioIsCancelError(e)
+      ? 'Fingerprint setup cancelled — PIN still works.'
+      : 'Could not enable fingerprint unlock. Use PIN or your invisible ID instead.';
+  }
+};
+$('disableBioBtn').onclick = async () => {
+  const plugin = nativeBiometric();
+  if (plugin) { try { await plugin.deleteCredentials({ server: BIO_SERVER }); } catch {} }
+  if (vault) { vault.bioHash = null; saveVault(vault); }
+  $('bioMsg').textContent = 'Fingerprint unlock removed. Use PIN or your invisible ID to unlock.';
+  updateBioUI(); updateBioUnlockCard();
+};
+$('bioUnlockBtn').onclick = async () => {
+  const generic = 'Fingerprint did not unlock the vault. Try again, or use PIN / your invisible ID below.';
+  const plugin = nativeBiometric();
+  const v = migrate(loadVault());
+  if (!plugin || !v || !v.bioHash) { $('bioUnlockMsg').textContent = generic; return; }
+  try {
+    // One native prompt, bound to the Keystore read. Returns the token.
+    const creds = await plugin.getSecureCredentials({
+      server: BIO_SERVER, title: 'Unlock Invisible ID Vault',
+      subtitle: 'Use your fingerprint to unlock the vault', negativeButtonText: 'Use PIN instead',
+    });
+    if (creds && creds.password && (await sha256Hex(creds.password)) === v.bioHash) {
+      showVault(v);
+      toast('Unlocked with fingerprint.');
+      return;
+    }
+    $('bioUnlockMsg').textContent = generic;
+  } catch (e) {
+    if (bioIsCancelError(e)) { $('bioUnlockMsg').textContent = 'Fingerprint cancelled — use PIN or your invisible ID below.'; return; }
+    // Fallback path (older plugin behaviour): prompt-only check, then a
+    // plain Keystore read. Still gated by a live biometric prompt.
+    try {
+      await plugin.verifyIdentity({ title: 'Unlock Invisible ID Vault', reason: 'Confirm your fingerprint to unlock the vault', negativeButtonText: 'Cancel' });
+      const creds = await plugin.getCredentials({ server: BIO_SERVER });
+      if (creds && creds.password && (await sha256Hex(creds.password)) === v.bioHash) {
+        showVault(v);
+        toast('Unlocked with fingerprint.');
+        return;
+      }
+    } catch {}
+    $('bioUnlockMsg').textContent = generic;
+  }
+};
+$('usePinLink').onclick = (e) => { e.preventDefault(); $('bioUnlockCard').classList.add('hidden'); const pin = $('pinUnlockInput'); if (pin) pin.focus(); };
+$('useIdLink2').onclick = (e) => { e.preventDefault(); $('bioUnlockCard').classList.add('hidden'); $('unlockId').focus(); };
+
 /* ---------- auto-lock (2 minutes idle) ---------- */
 function resetIdle() { idleSecondsLeft = 120; updateCountdown(); }
 function updateCountdown() { const el = $('idleCountdown'); if (el && unlocked) el.textContent = 'Auto-lock in ' + Math.floor(idleSecondsLeft / 60) + ':' + String(idleSecondsLeft % 60).padStart(2, '0'); }
@@ -181,8 +345,10 @@ function lockVault() {
   const el = $('idleCountdown'); if (el) el.textContent = '';
 }
 $('lockBtn').onclick = lockVault;
-$('deleteBtn').onclick = () => {
+$('deleteBtn').onclick = async () => {
   if (!confirm('Permanently delete this vault and all its secrets and notes from this device?')) return;
+  const plugin = nativeBiometric();
+  if (plugin) { try { await plugin.deleteCredentials({ server: BIO_SERVER }); } catch {} }
   localStorage.removeItem(STORE_KEY);
   lockVault(); $('recovery').classList.add('hidden'); $('createMsg').textContent = 'Vault deleted.';
 };
@@ -329,11 +495,14 @@ $('attackBtn').onclick = () => { $('attackMsg').textContent = '1,000,000 random 
 function renderAll() { renderChips(); renderSecrets(); renderHealth(); renderNotes(); }
 
 // If a vault already exists, hint at it (fingerprint only, never the ID).
-(function init() {
+(async function init() {
   const v = migrate(loadVault());
   if (v) {
     $('unlockMsg').textContent = 'A vault exists on this device (' + fingerprint(v.idHash) + ' · ' + v.label + '). Unlock it above.';
     if (v.pinHash) $('pinUnlockCard').classList.remove('hidden');
   }
   renderChips();
+  // Native Android only: show "Unlock with fingerprint" only when a
+  // biometric is actually enrolled and a fingerprint token was saved.
+  await checkBiometricAvailability();
 })();

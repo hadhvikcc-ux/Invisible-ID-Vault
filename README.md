@@ -17,6 +17,7 @@ An account system where **the user ID itself is invisible, opaque and unguessabl
 - **Social apps hub:** one-tap launch, copy username/password (password hides again after 30 s), show/hide password.
 - **Search, favourites, categories:** live search, category chips, favourites first.
 - **PIN unlock (Android):** 4–6 digit PIN after the first ID unlock, with invisible-ID fallback.
+- **Fingerprint unlock (Android):** native fingerprint via the free `@capgo/capacitor-native-biometric` v8 plugin — a Keystore-gated token, alongside PIN, with invisible-ID fallback. Not offered on the web.
 - **Auto-lock:** locks after 2 minutes idle, with a countdown and a Lock now button.
 - **Password generator + strength meter** when adding a login.
 - **Vault health:** weak and reused passwords flagged, logins counted by category.
