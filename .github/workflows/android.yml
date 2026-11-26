@@ -5,6 +5,10 @@ name: Android
 # The native android/ platform is NOT committed to the repo (it contains
 # binary PNG/JAR assets that cannot be pushed via the GitHub App) — this
 # workflow generates it on the runner with `npx cap add android`, then syncs.
+# NOTE: do NOT use android-actions/setup-android — v3 targets Node 20, which
+# GitHub removed from Actions runners in Sep 2026, so that step fails.
+# ubuntu-latest runners already ship an Android SDK (ANDROID_HOME is set),
+# so Gradle finds it without any setup-android step.
 on:
   push:
     branches: [main]
@@ -40,8 +44,12 @@ jobs:
           java-version: '17'
           distribution: temurin
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Check preinstalled Android SDK
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          ls "$ANDROID_HOME" || ls /usr/local/lib/android/sdk
+          chmod +x android/gradlew
 
       - name: Build debug APK
         run: ./gradlew -p android assembleDebug
@@ -52,4 +60,3 @@ jobs:
           name: invisible-id-vault-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
-
